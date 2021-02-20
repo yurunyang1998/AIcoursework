@@ -12,7 +12,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from imagenet10 import ImageNet10
-
+import  config
 import pandas as pd
 import os
 
@@ -25,14 +25,14 @@ for i, dir_ in enumerate(CLASS_LABELS):
         if (entry.is_file()):
             paths.append(entry.path)
             classes.append(i)
-            
+
 data = {
     'path': paths,
     'class': classes
 }
 
 data_df = pd.DataFrame(data, columns=['path', 'class'])
-data_df = data_df.sample(frac=1).reset_index(drop=True) # Shuffles the data
+data_df = data_df.sample(frac=1).reset_index(drop=True)  # Shuffles the data
 
 # See what the dataframe now contains
 # print("Found", len(data_df), "images.")
@@ -42,19 +42,17 @@ data_df = data_df.sample(frac=1).reset_index(drop=True) # Shuffles the data
 
 
 # Split the data into train and test sets and instantiate our new ImageNet10 objects.
-train_split = 0.80 # Defines the ratio of train/valid data.
+train_split = 0.80  # Defines the ratio of train/valid data.
 
 # valid_size = 1.0 - train_size
-train_size = int(len(data_df)*train_split)
-
+train_size = int(len(data_df) * train_split)
 
 data_transform = transforms.Compose([
-        transforms.Resize(128),
-        transforms.CenterCrop(128),
-        transforms.ToTensor(),
-        transforms.Normalize(NORM_MEAN, NORM_STD),
-    ])
-
+    transforms.Resize(224),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(NORM_MEAN, NORM_STD),
+])
 
 dataset_train = ImageNet10(
     df=data_df[:train_size],
@@ -66,18 +64,17 @@ dataset_valid = ImageNet10(
     transform=data_transform,
 )
 
-
 # Data loaders for use during training
 train_loader = torch.utils.data.DataLoader(
     dataset_train,
-    batch_size=64,
+    batch_size=1,
     shuffle=True,
     num_workers=2
 )
 
 valid_loader = torch.utils.data.DataLoader(
     dataset_valid,
-    batch_size=1,
+    batch_size=16,
     shuffle=True,
     num_workers=2
 )
@@ -89,21 +86,35 @@ valid_loader = torch.utils.data.DataLoader(
 print("len(train_loader)", len(train_loader))
 print("len(valid_loader)", len(valid_loader))
 
-
-
 if __name__ == '__main__':
+
+
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(device)
     net = module.Module()
-    criterion = torch.nn.MSELoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.0001)
-    for epoch in range(EPOCH):
-        for i, (x, y) in enumerate(train_loader):
-            optimizer.zero_grad()
-            output = net(x)
-            label = y.view(1,-1, 1)
-            loss = criterion(output,label.float())
+    # net = module.vgg("vgg16")
+    net.to(device)
+    # net.load_state_dict(torch.load(config.MODELPATH+"modelcheckpoint"))
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = optim.Adadelta(net.parameters(), lr=0.1)
+    for epoch in range(30):
+        running_loss = 0.0
+        for i, data in enumerate(train_loader):
+            # input = data[0].to(device)
+            # label = data[1].to(device)
+            input, label = data[0],data[1]
+            # input = input.view(input.size(0), -1)
+            output = net(input)
+            # label = label.view(1,-1, 1)
+            loss = criterion(output,label)
             loss.backward()
             optimizer.step()
-            if(i%300==0):
-                print("loss: ", loss)
-    modelfile = "model-chcekpoint-" + str(i)
-    torch.save(net.state_dict(), MODELPATH + modelfile)
+            optimizer.zero_grad()
+            running_loss+=loss.item()
+            if i % 10 == 1:  # print every 2000 mini-batches
+                print('[%d, %5d] loss: %.3f' %
+                      (epoch + 1, i + 1, running_loss / 10))
+                running_loss = 0.0
+        modelfile = "modelcheckpoint"
+        torch.save(net.state_dict(), MODELPATH + modelfile)

@@ -15,14 +15,15 @@ def imshow(img):
     plt.show()
 
 if __name__ == '__main__':
-
-    net = module.Module()
-    net.load_state_dict(torch.load(config.MODELPATH+"model-chcekpoint-112"))
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    net = module.vgg("vgg16")
+    net.to(device)
+    net.load_state_dict(torch.load(config.MODELPATH+"modelcheckpoint"))
     correct = 0
     total = 0
     with torch.no_grad():
         for data in valid_loader:
-            images, labels = data
+            images, labels = data[0].to(device), data[1].to(device)
             outputs = net(images)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
